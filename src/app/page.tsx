@@ -145,6 +145,10 @@ export default function Home() {
               viewportMax={config.viewportMax}
               baseMin={config.baseMin}
               baseMax={config.baseMax}
+              stepsUp={config.stepsUp}
+              stepsDown={config.stepsDown}
+              onStepsUpChange={(n) => patchConfig({ stepsUp: n })}
+              onStepsDownChange={(n) => patchConfig({ stepsDown: n })}
             />
           </div>
 
