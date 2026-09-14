@@ -1,147 +1,279 @@
+// Lumos fluid scale — mirrors the math and output of https://fluidbuilder.webflow.io
+// so values and variable names match a Lumos project 1:1. All sizes are in rem.
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface TypescaleConfig {
-  /** Base font size (px) at the minimum viewport */
-  baseMin: number;
-  /** Base font size (px) at the maximum viewport */
+export type GroupId = "headings" | "text" | "spacing";
+
+export interface ViewportConfig {
+  /** Stop scaling down at this screen size (rem) */
+  min: number;
+  /** Figma design width — values are reached at this size (rem) */
+  design: number;
+  /** Webflow site width — stop scaling up at this size (rem) */
+  max: number;
+}
+
+export interface ScaleGroupConfig {
+  /** Desktop scale ratio */
+  ratioMax: number;
+  /** Mobile scale ratio */
+  ratioMin: number;
+  /** Index (in GROUP_DEFS order) of the variable the scale is anchored to */
+  baseIndex: number;
+  /** Anchor size at the design width (rem) */
   baseMax: number;
-  /** Scale ratio (e.g. 1.333 for Perfect Fourth) */
-  ratio: number;
-  /** Number of steps above the base */
-  stepsUp: number;
-  /** Number of steps below the base */
-  stepsDown: number;
-  /** Minimum viewport width in px */
-  viewportMin: number;
-  /** Maximum viewport width in px */
-  viewportMax: number;
+  /** Anchor size at the min screen width (rem) */
+  baseMin: number;
 }
 
-export interface TypeStep {
-  /** e.g. "h1", "h2", "base", "sm" */
+export interface LumosConfig {
+  viewport: ViewportConfig;
+  groups: Record<GroupId, ScaleGroupConfig>;
+  siteMargin: { max: number; min: number };
+}
+
+export interface FluidToken {
+  group: GroupId | "general";
+  /** Human label, e.g. "H1" */
   label: string;
-  /** Step index relative to base (0 = base, positive = larger) */
-  step: number;
-  /** Font size in px at min viewport */
-  minPx: number;
-  /** Font size in px at max viewport */
-  maxPx: number;
-  /** Font size in rem at min viewport */
-  minRem: number;
-  /** Font size in rem at max viewport */
-  maxRem: number;
-  /** The preferred value in vw for the clamp middle term */
-  slopeVw: number;
-  /** The intercept in rem for the clamp middle term */
-  interceptRem: number;
-  /** Full CSS clamp() value */
-  clamp: string;
   /** CSS custom property name */
-  varName: string;
+  name: string;
+  /** Size at min screen (rem) */
+  min: number;
+  /** Size at design width (rem) */
+  max: number;
+  /** Size at max screen — the clamp upper bound (rem) */
+  maxScreen: number;
+  interceptRem: number;
+  vw: number;
+  /** Full clamp() value, including the trailing semicolon */
+  clamp: string;
+  isBase: boolean;
+  /** Fluid Builder's 500%-zoom check */
+  accessible: boolean;
+  /** Intercept ≤ 0 — the value shrinks toward zero on small screens */
+  shrinks: boolean;
 }
 
-// ─── Named ratios ─────────────────────────────────────────────────────────────
+// ─── Lumos variable definitions ───────────────────────────────────────────────
 
-export const NAMED_RATIOS: { label: string; value: number }[] = [
-  { label: "Minor Second — 1.067", value: 1.067 },
-  { label: "Major Second — 1.125", value: 1.125 },
-  { label: "Minor Third — 1.200", value: 1.2 },
-  { label: "Major Third — 1.250", value: 1.25 },
-  { label: "Perfect Fourth — 1.333", value: 1.333 },
-  { label: "Augmented Fourth — 1.414", value: 1.414 },
-  { label: "Perfect Fifth — 1.500", value: 1.5 },
-  { label: "Golden Ratio — 1.618", value: 1.618 },
+export interface GroupDef {
+  id: GroupId;
+  title: string;
+  /** Largest → smallest, same order as Fluid Builder */
+  vars: { name: string; label: string }[];
+}
+
+export const GROUP_DEFS: GroupDef[] = [
+  {
+    id: "headings",
+    title: "Headings",
+    vars: [
+      { name: "--_typography---font-size--display", label: "Display" },
+      { name: "--_typography---font-size--h1", label: "H1" },
+      { name: "--_typography---font-size--h2", label: "H2" },
+      { name: "--_typography---font-size--h3", label: "H3" },
+      { name: "--_typography---font-size--h4", label: "H4" },
+      { name: "--_typography---font-size--h5", label: "H5" },
+      { name: "--_typography---font-size--h6", label: "H6" },
+    ],
+  },
+  {
+    id: "text",
+    title: "Paragraphs",
+    vars: [
+      { name: "--_typography---font-size--text-large", label: "Text Large" },
+      { name: "--_typography---font-size--text-main", label: "Text Main" },
+      { name: "--_typography---font-size--text-small", label: "Text Small" },
+    ],
+  },
+  {
+    id: "spacing",
+    title: "Spacing",
+    vars: [
+      { name: "--_spacing---section-space--large", label: "Section Large" },
+      { name: "--_spacing---section-space--main", label: "Section Main" },
+      { name: "--_spacing---section-space--small", label: "Section Small" },
+      { name: "--_spacing---space--8", label: "Space 8" },
+      { name: "--_spacing---space--7", label: "Space 7" },
+      { name: "--_spacing---space--6", label: "Space 6" },
+      { name: "--_spacing---space--5", label: "Space 5" },
+      { name: "--_spacing---space--4", label: "Space 4" },
+      { name: "--_spacing---space--3", label: "Space 3" },
+      { name: "--_spacing---space--2", label: "Space 2" },
+      { name: "--_spacing---space--1", label: "Space 1" },
+    ],
+  },
 ];
 
-// ─── Step labels ──────────────────────────────────────────────────────────────
+export const SITE_MARGIN_VAR = "--site--margin";
 
-const STEP_LABELS: Record<number, string> = {
-  6: "9xl",
-  5: "8xl",
-  4: "7xl",
-  3: "6xl / h1",
-  2: "4xl / h2",
-  1: "2xl / h3",
-  0: "base",
-  "-1": "sm",
-  "-2": "xs",
-  "-3": "2xs",
+export const LUMOS_DEFAULTS: LumosConfig = {
+  viewport: { min: 20, design: 90, max: 90 },
+  groups: {
+    headings: { ratioMax: 1.39, ratioMin: 1.26, baseIndex: 6, baseMax: 1, baseMin: 1 },
+    text: { ratioMax: 1.2, ratioMin: 1.14, baseIndex: 2, baseMax: 0.875, baseMin: 0.875 },
+    spacing: { ratioMax: 1.49, ratioMin: 1.4, baseIndex: 10, baseMax: 0.25, baseMin: 0.25 },
+  },
+  siteMargin: { max: 3, min: 1 },
 };
 
-function stepLabel(step: number): string {
-  return STEP_LABELS[step] ?? (step > 0 ? `+${step}` : `${step}`);
+export const ROOT_PX = 16;
+
+// ─── Core calculation (ported from Fluid Builder) ─────────────────────────────
+
+const fixed = (n: number, digits: number) => parseFloat(n.toFixed(digits));
+
+function fluid(
+  min: number,
+  max: number,
+  viewport: ViewportConfig
+): Pick<FluidToken, "maxScreen" | "interceptRem" | "vw" | "clamp" | "accessible" | "shrinks"> {
+  const slope = fixed((max - min) / (viewport.design - viewport.min), 4);
+  const maxScreen = fixed(max + slope * (viewport.max - viewport.design), 4);
+  const interceptRem = fixed(min - slope * viewport.min, 4);
+  const vw = fixed(slope * 100, 4);
+
+  const clamp =
+    min > maxScreen
+      ? `clamp(${maxScreen}rem, ${interceptRem}rem + ${vw}vw, ${min}rem);`
+      : `clamp(${min}rem, ${interceptRem}rem + ${vw}vw, ${maxScreen}rem);`;
+
+  return {
+    maxScreen,
+    interceptRem,
+    vw,
+    clamp,
+    accessible: maxScreen <= 2.5 * min,
+    shrinks: interceptRem <= 0,
+  };
 }
 
-function varName(step: number): string {
-  if (step === 0) return "--fs-base";
-  if (step > 0) {
-    const names = ["lg", "xl", "2xl", "3xl", "4xl", "5xl", "6xl"];
-    return `--fs-${names[step - 1] ?? `step-${step}`}`;
-  }
-  const names = ["sm", "xs", "2xs", "3xs"];
-  return `--fs-${names[Math.abs(step) - 1] ?? `step-${step}`}`;
-}
+export function computeTokens(config: LumosConfig): FluidToken[] {
+  const { viewport } = config;
+  const tokens: FluidToken[] = [
+    {
+      group: "general",
+      label: "Site Margin",
+      name: SITE_MARGIN_VAR,
+      min: config.siteMargin.min,
+      max: config.siteMargin.max,
+      isBase: false,
+      ...fluid(config.siteMargin.min, config.siteMargin.max, viewport),
+    },
+  ];
 
-function round(n: number, decimals = 4) {
-  return Math.round(n * 10 ** decimals) / 10 ** decimals;
-}
-
-// ─── Core calculation ─────────────────────────────────────────────────────────
-
-export function computeTypescale(config: TypescaleConfig): TypeStep[] {
-  const {
-    baseMin,
-    baseMax,
-    ratio,
-    stepsUp,
-    stepsDown,
-    viewportMin,
-    viewportMax,
-  } = config;
-
-  const ROOT_PX = 16; // browser default
-
-  const steps: TypeStep[] = [];
-
-  for (let step = -stepsDown; step <= stepsUp; step++) {
-    const minPx = round(baseMin * ratio ** step);
-    const maxPx = round(baseMax * ratio ** step);
-
-    const minRem = round(minPx / ROOT_PX);
-    const maxRem = round(maxPx / ROOT_PX);
-
-    // slope in rem/px, then expressed as vw multiplier
-    const slope = (maxRem - minRem) / (viewportMax - viewportMin);
-    const slopeVw = round(slope * 100); // per 100vw
-    const interceptRem = round(minRem - slope * viewportMin);
-
-    const preferred = `${slopeVw}vw + ${interceptRem}rem`;
-    const clampVal = `clamp(${minRem}rem, ${preferred}, ${maxRem}rem)`;
-
-    steps.push({
-      label: stepLabel(step),
-      step,
-      minPx,
-      maxPx,
-      minRem,
-      maxRem,
-      slopeVw,
-      interceptRem,
-      clamp: clampVal,
-      varName: varName(step),
+  for (const def of GROUP_DEFS) {
+    const g = config.groups[def.id];
+    def.vars.forEach((v, index) => {
+      const isBase = index === g.baseIndex;
+      const dataIndex = g.baseIndex - index;
+      // Fluid Builder writes scaled values back into its inputs with toFixed(2)
+      const max = isBase ? g.baseMax : fixed(g.baseMax * g.ratioMax ** dataIndex, 2);
+      const min = isBase ? g.baseMin : fixed(g.baseMin * g.ratioMin ** dataIndex, 2);
+      tokens.push({
+        group: def.id,
+        label: v.label,
+        name: v.name,
+        min,
+        max,
+        isBase,
+        ...fluid(min, max, viewport),
+      });
     });
   }
 
-  // Sort largest → smallest for display
-  return steps.slice().reverse();
+  return tokens;
 }
 
-// ─── CSS output ───────────────────────────────────────────────────────────────
+/** Size in rem at a given screen width in px — what the clamp() resolves to. */
+export function sizeAt(token: FluidToken, screenPx: number): number {
+  const preferred = token.interceptRem + (token.vw * screenPx) / 100 / ROOT_PX;
+  const lo = Math.min(token.min, token.maxScreen);
+  const hi = Math.max(token.min, token.maxScreen);
+  return Math.min(hi, Math.max(lo, preferred));
+}
 
-export function toCSSVariables(steps: TypeStep[]): string {
-  const lines = steps
-    .slice()
-    .sort((a, b) => a.step - b.step)
-    .map((s) => `  ${s.varName}: ${s.clamp};`);
-  return `:root {\n${lines.join("\n")}\n}`;
+// ─── Output ───────────────────────────────────────────────────────────────────
+
+const FLUID_BUILDER = "https://fluidbuilder.webflow.io/";
+
+export function toFluidBuilderUrl(config: LumosConfig, tokens: FluidToken[]): string {
+  const { viewport, siteMargin } = config;
+  let url = `${FLUID_BUILDER}?design=${viewport.design}&max=${viewport.max}&min=${viewport.min}&f`;
+  url += `&g=${SITE_MARGIN_VAR},${siteMargin.max},${siteMargin.min}`;
+  for (const def of GROUP_DEFS) {
+    const g = config.groups[def.id];
+    const items = tokens
+      .filter((t) => t.group === def.id)
+      .map((t) => `${t.name},${t.max},${t.min}${t.isBase ? ",t" : ""}`);
+    url += `&g=:${g.ratioMax},${g.ratioMin}:${items.join("_")}`;
+  }
+  return url;
+}
+
+export function toRootCSS(tokens: FluidToken[]): string {
+  const lines = tokens.map((t) => `\n\t${t.name}: ${t.clamp}`).join("");
+  return `:root {${lines}\n}`;
+}
+
+/** Identical to Fluid Builder's "Copy Code" output — paste into Webflow site settings. */
+export function toWebflowEmbed(config: LumosConfig, tokens: FluidToken[]): string {
+  return `<style>\n/* ${toFluidBuilderUrl(config, tokens)} */\n\n${toRootCSS(tokens)}\n</style>`;
+}
+
+// ─── Import ───────────────────────────────────────────────────────────────────
+
+/**
+ * Reads a Fluid Builder share URL (or just its query string) back into a config.
+ * Only Lumos variables are picked up; anything else is ignored.
+ */
+export function parseFluidBuilderUrl(input: string): LumosConfig | null {
+  const query = input.includes("?") ? input.slice(input.indexOf("?")) : input;
+  const params = new URLSearchParams(query);
+  if (!params.has("g")) return null;
+
+  const config: LumosConfig = structuredClone(LUMOS_DEFAULTS);
+  const num = (v: string | null, fallback: number) => {
+    const n = parseFloat(v ?? "");
+    return Number.isFinite(n) ? n : fallback;
+  };
+  config.viewport = {
+    min: num(params.get("min"), config.viewport.min),
+    design: num(params.get("design"), config.viewport.design),
+    max: num(params.get("max"), config.viewport.max),
+  };
+
+  for (let value of params.getAll("g")) {
+    let ratios: [number, number] | null = null;
+    if (value.startsWith(":")) {
+      const end = value.lastIndexOf(":");
+      const [rMax, rMin] = value.slice(1, end).split(",").map(Number);
+      ratios = [rMax, rMin];
+      value = value.slice(end + 1);
+    }
+
+    for (const item of value.split(/(?<!-)_/)) {
+      const [name, max, min, flag] = item.split(",");
+      if (name === SITE_MARGIN_VAR) {
+        config.siteMargin = { max: num(max, 3), min: num(min, 1) };
+        continue;
+      }
+      if (!ratios || flag !== "t") continue;
+      for (const def of GROUP_DEFS) {
+        const index = def.vars.findIndex((v) => v.name === name);
+        if (index === -1) continue;
+        config.groups[def.id] = {
+          ratioMax: ratios[0],
+          ratioMin: ratios[1],
+          baseIndex: index,
+          baseMax: num(max, 1),
+          baseMin: num(min, 1),
+        };
+      }
+    }
+  }
+
+  return config;
 }

@@ -1,30 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import Controls from "@/components/Controls";
 import FontUpload from "@/components/FontUpload";
 import Preview from "@/components/Preview";
 import CodeOutput from "@/components/CodeOutput";
-import { computeTypescale, TypescaleConfig } from "@/lib/typescale";
-
-const DEFAULT_CONFIG: TypescaleConfig = {
-  baseMin: 16,
-  baseMax: 18,
-  ratio: 1.333,
-  stepsUp: 6,
-  stepsDown: 2,
-  viewportMin: 320,
-  viewportMax: 1280,
-};
+import { computeTokens, LUMOS_DEFAULTS, LumosConfig, ROOT_PX } from "@/lib/typescale";
 
 export default function Home() {
-  const [config, setConfig] = useState<TypescaleConfig>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<LumosConfig>(LUMOS_DEFAULTS);
   const [fontName, setFontName] = useState<string | null>(null);
   const [fontFamily, setFontFamily] = useState<string>("system-ui");
   const [sampleText, setSampleText] = useState(
     "Almost before we knew it, we had left the ground."
   );
-  const [previewWidth, setPreviewWidth] = useState(960);
+  const [rawPreviewWidth, setPreviewWidth] = useState(LUMOS_DEFAULTS.viewport.design * ROOT_PX);
   const styleRef = useRef<HTMLStyleElement | null>(null);
 
   const handleFontLoad = (name: string, dataUrl: string) => {
@@ -50,21 +40,14 @@ export default function Home() {
     setFontFamily("system-ui");
   };
 
-  const patchConfig = (patch: Partial<TypescaleConfig>) =>
-    setConfig((c) => ({ ...c, ...patch }));
+  const tokens = computeTokens(config);
 
-  const steps = computeTypescale(config);
+  const screenMin = config.viewport.min * ROOT_PX;
+  const screenMax = Math.max(config.viewport.max, config.viewport.design) * ROOT_PX;
 
-  useEffect(() => {
-    setPreviewWidth((w) =>
-      Math.max(config.viewportMin, Math.min(config.viewportMax, w))
-    );
-  }, [config.viewportMin, config.viewportMax]);
+  const previewWidth = Math.max(screenMin, Math.min(screenMax, rawPreviewWidth));
 
-  const vpPercent =
-    ((previewWidth - config.viewportMin) /
-      (config.viewportMax - config.viewportMin)) *
-    100;
+  const vpPercent = ((previewWidth - screenMin) / (screenMax - screenMin || 1)) * 100;
 
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
@@ -73,11 +56,11 @@ export default function Home() {
         <div className="flex items-center gap-3">
           <span className="text-xl font-bold tracking-tight">Typescale</span>
           <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-xs text-indigo-300">
-            fluid
+            Lumos
           </span>
         </div>
         <p className="text-xs text-neutral-500 hidden sm:block">
-          Fluid typography generator · CSS clamp()
+          Fluid type &amp; spacing for Lumos · rem · clamp()
         </p>
       </header>
 
@@ -90,7 +73,7 @@ export default function Home() {
               onFontLoad={handleFontLoad}
               onFontClear={handleFontClear}
             />
-            <Controls config={config} onChange={patchConfig} />
+            <Controls config={config} onChange={setConfig} onReset={() => setConfig(LUMOS_DEFAULTS)} />
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold uppercase tracking-widest text-neutral-400">
                 Sample text
@@ -111,13 +94,13 @@ export default function Home() {
           {/* Viewport slider */}
           <div className="border-b border-neutral-800 px-6 py-3 flex items-center gap-4">
             <span className="text-xs text-neutral-500 shrink-0">
-              {config.viewportMin}px
+              {config.viewport.min}rem
             </span>
             <div className="flex-1 relative">
               <input
                 type="range"
-                min={config.viewportMin}
-                max={config.viewportMax}
+                min={screenMin}
+                max={screenMax}
                 value={previewWidth}
                 onChange={(e) => setPreviewWidth(parseInt(e.target.value))}
                 className="w-full h-1 appearance-none rounded-full cursor-pointer accent-indigo-500"
@@ -127,34 +110,26 @@ export default function Home() {
               />
             </div>
             <span className="text-xs text-neutral-500 shrink-0">
-              {config.viewportMax}px
+              {Math.max(config.viewport.max, config.viewport.design)}rem
             </span>
-            <span className="text-xs font-mono text-indigo-400 shrink-0 w-16 text-right">
-              {previewWidth}px
+            <span className="text-xs font-mono text-indigo-400 shrink-0 w-32 text-right">
+              {parseFloat((previewWidth / ROOT_PX).toFixed(2))}rem · {previewWidth}px
             </span>
           </div>
 
           {/* Preview */}
           <div className="flex-1 px-6 py-6">
             <Preview
-              steps={steps}
+              tokens={tokens}
               fontFamily={fontFamily}
               sampleText={sampleText}
-              previewWidth={previewWidth}
-              viewportMin={config.viewportMin}
-              viewportMax={config.viewportMax}
-              baseMin={config.baseMin}
-              baseMax={config.baseMax}
-              stepsUp={config.stepsUp}
-              stepsDown={config.stepsDown}
-              onStepsUpChange={(n) => patchConfig({ stepsUp: n })}
-              onStepsDownChange={(n) => patchConfig({ stepsDown: n })}
+              screenPx={previewWidth}
             />
           </div>
 
           {/* Code output */}
           <div className="border-t border-neutral-800 px-6 py-6">
-            <CodeOutput steps={steps} />
+            <CodeOutput config={config} tokens={tokens} />
           </div>
         </main>
       </div>

@@ -1,12 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { TypeStep, toCSSVariables } from "@/lib/typescale";
+import {
+  FluidToken,
+  LumosConfig,
+  toFluidBuilderUrl,
+  toRootCSS,
+  toWebflowEmbed,
+} from "@/lib/typescale";
 
-type Tab = "css" | "table";
+type Tab = "embed" | "css" | "table";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "embed", label: "Webflow embed" },
+  { id: "css", label: "CSS" },
+  { id: "table", label: "Values table" },
+];
 
 interface CodeOutputProps {
-  steps: TypeStep[];
+  config: LumosConfig;
+  tokens: FluidToken[];
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -15,8 +28,6 @@ function CopyButton({ text }: { text: string }) {
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
     } catch {
       // fallback — select + execCommand for older Safari
       const el = document.createElement("textarea");
@@ -25,101 +36,87 @@ function CopyButton({ text }: { text: string }) {
       el.select();
       document.execCommand("copy");
       document.body.removeChild(el);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
     }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
   };
 
   return (
     <button
       onClick={handleCopy}
       className="rounded-md px-3 py-1 text-xs font-medium transition-colors
-        bg-neutral-700 text-neutral-300 hover:bg-neutral-600 hover:text-white"
+        bg-indigo-500 text-white hover:bg-indigo-400"
     >
       {copied ? "✓ Copied!" : "Copy"}
     </button>
   );
 }
 
-export default function CodeOutput({ steps }: CodeOutputProps) {
-  const [tab, setTab] = useState<Tab>("css");
+export default function CodeOutput({ config, tokens }: CodeOutputProps) {
+  const [tab, setTab] = useState<Tab>("embed");
 
-  const sorted = steps.slice().sort((a, b) => a.step - b.step);
-  const cssString = toCSSVariables(steps);
+  const tableText = tokens
+    .map((t) => `${t.name}\t${t.min}rem\t${t.maxScreen}rem\t${t.clamp}`)
+    .join("\n");
+  const copyText =
+    tab === "embed" ? toWebflowEmbed(config, tokens) : tab === "css" ? toRootCSS(tokens) : tableText;
 
   return (
     <div className="rounded-xl border border-neutral-700 bg-neutral-900 overflow-hidden">
       {/* Tab bar */}
-      <div className="flex items-center justify-between border-b border-neutral-700 px-4 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-700 px-4 py-2">
         <div className="flex gap-1">
-          {(["css", "table"] as Tab[]).map((t) => (
+          {TABS.map((t) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={t.id}
+              onClick={() => setTab(t.id)}
               className={`rounded-md px-3 py-1 text-xs font-medium transition-colors
-                ${tab === t
-                  ? "bg-neutral-700 text-white"
-                  : "text-neutral-500 hover:text-neutral-300"
-                }`}
+                ${tab === t.id ? "bg-neutral-700 text-white" : "text-neutral-500 hover:text-neutral-300"}`}
             >
-              {t === "css" ? "CSS Variables" : "Values table"}
+              {t.label}
             </button>
           ))}
         </div>
-        <CopyButton
-          text={
-            tab === "css"
-              ? cssString
-              : sorted
-                  .map(
-                    (s) =>
-                      `${s.varName}\t${s.minPx}px\t${s.maxPx}px\t${s.minRem}rem → ${s.maxRem}rem`
-                  )
-                  .join("\n")
-          }
-        />
+        <div className="flex items-center gap-3">
+          <a
+            href={toFluidBuilderUrl(config, tokens)}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-neutral-400 hover:text-white"
+          >
+            Open in Fluid Builder ↗
+          </a>
+          <CopyButton text={copyText} />
+        </div>
       </div>
 
       {/* Content */}
-      <div className="overflow-auto max-h-96 p-4">
-        {tab === "css" ? (
-          <pre className="text-xs leading-relaxed text-neutral-300 whitespace-pre">
-            <code>{cssString}</code>
-          </pre>
-        ) : (
+      <div className="overflow-auto max-h-[28rem] p-4">
+        {tab === "table" ? (
           <table className="w-full text-xs text-left border-collapse">
             <thead>
               <tr className="text-neutral-500 border-b border-neutral-700">
                 <th className="pb-2 pr-4 font-semibold">Variable</th>
-                <th className="pb-2 pr-4 font-semibold">Step</th>
-                <th className="pb-2 pr-4 font-semibold">Min</th>
-                <th className="pb-2 pr-4 font-semibold">Max</th>
+                <th className="pb-2 pr-4 font-semibold">Mobile</th>
+                <th className="pb-2 pr-4 font-semibold">Desktop</th>
                 <th className="pb-2 font-semibold">Clamp</th>
               </tr>
             </thead>
             <tbody>
-              {sorted.map((s) => (
-                <tr
-                  key={s.step}
-                  className="border-b border-neutral-800 text-neutral-300 hover:bg-neutral-800/40"
-                >
-                  <td className="py-1.5 pr-4 font-mono text-indigo-400">
-                    {s.varName}
-                  </td>
-                  <td className="py-1.5 pr-4 text-neutral-500">{s.label}</td>
-                  <td className="py-1.5 pr-4 font-mono">
-                    {s.minPx}px / {s.minRem}rem
-                  </td>
-                  <td className="py-1.5 pr-4 font-mono">
-                    {s.maxPx}px / {s.maxRem}rem
-                  </td>
-                  <td className="py-1.5 font-mono text-neutral-500 text-[10px]">
-                    {s.clamp}
-                  </td>
+              {tokens.map((t) => (
+                <tr key={t.name} className="border-b border-neutral-800 text-neutral-300 hover:bg-neutral-800/40">
+                  <td className="py-1.5 pr-4 font-mono text-indigo-400 whitespace-nowrap">{t.name}</td>
+                  <td className="py-1.5 pr-4 font-mono">{t.min}rem</td>
+                  <td className="py-1.5 pr-4 font-mono">{t.maxScreen}rem</td>
+                  <td className="py-1.5 font-mono text-neutral-500 text-[10px] whitespace-nowrap">{t.clamp}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+        ) : (
+          <pre className="text-xs leading-relaxed text-neutral-300 whitespace-pre" style={{ tabSize: 2 }}>
+            <code>{copyText}</code>
+          </pre>
         )}
       </div>
     </div>

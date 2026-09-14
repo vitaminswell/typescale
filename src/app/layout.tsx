@@ -8,9 +8,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Typescale — Fluid Typography Generator",
+  title: "Typescale — Lumos Fluid Type & Spacing",
   description:
-    "Generate fluid typescales using CSS clamp(). Upload a font, set your scale ratio and viewport range, and get instant CSS variables.",
+    "Generate fluid typescales using CSS clamp(). Upload a font, set your scale ratio and viewport range, and get Lumos-ready CSS variables in rem.",
 };
 
 export default function RootLayout({
